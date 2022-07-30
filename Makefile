@@ -16,10 +16,8 @@ PLUGINDOCSDIR := $(shell pkg-config --variable=plugindocs lirc-driver)
 CONFIGDIR := $(shell pkg-config --variable=configdir lirc-driver)
 
 # Some extra includes and/or libraries might be needed
-#EXTRA_INCLUDES := -I/usr/include/libxml2
-#EXTRA_LIBS := -lxml2 -lDecodeIR -Wl,-rpath=/local/lib64
-EXTRA_INCLUDES := $(shell pkg-config libusb --cflags)
-EXTRA_LIBS := $(shell pkg-config libusb --libs)
+EXTRA_INCLUDES := $(shell pkg-config libusb lirc-driver --cflags)
+EXTRA_LIBS := $(shell pkg-config libusb lirc-driver --libs)
 
 MACHINE := -m64
 INCLUDE := -I$(LIRC_SRC)/lib -I$(LIRC_SRC) $(EXTRA_INCLUDES)
@@ -32,7 +30,7 @@ CPP := g++
 
 # Rule for compiling C
 %.so: %.c
-	echo PLUGINDIR=$(PLUGINDIR)
+	@echo PLUGINDIR=$(PLUGINDIR)
 	@echo EXTRA_INCLUDES=$(EXTRA_INCLUDES)
 	@echo EXTRA_LIBS=$(EXTRA_LIBS)
 	@echo CC=$(CC)
@@ -48,12 +46,8 @@ default:
 	@echo "and \"make install\" to install it"
 
 install:
-	#cp *.so $(DESTDIR)$(PLUGINDIR)
 	install -Dm755 *.so $(DESTDIR)$(PLUGINDIR)
-	#cp *.conf $(DESTDIR)$(CONFIGDIR)
 	install -Dm755 *.conf $(DESTDIR)$(CONFIGDIR)
-	#cp *.txt $(DESTDIR)$(PLUGINDOCSDIR)
 
 clean:
 	rm -f *.so
-

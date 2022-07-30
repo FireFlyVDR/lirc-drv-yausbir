@@ -4,9 +4,14 @@
  *
  * Mode2 receiver + transmitter using the yaUsbIr with power switch
  * Copyright (C) 2012 Uwe Guenther
- * Copyright (C) 2017 Christoph Haubrich
+ * Copyright (C) 2017, 2022 Christoph Haubrich
  *
  * change: 15.04.2012 speed up send_func 
+ * change: 27.08.2017 patch converted to driver for lirc 0.9.4c
+ * change: 26.06.2022 adapt to lirc 0.10.1
+ *
+ * Inspired by the hw_ftdi driver.
+ * CAUTION: due to lack of test possibilities the transmitter part is completly untested
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published
@@ -22,8 +27,6 @@
  *		Free Software Foundation, Inc.,
  *		59 Temple Place - Suite 330,
  *		Boston, MA 02111-1307, USA
- *
- * driver code version inspired by the hw_ftdi driver.
  *
  ****************************************************************************/
 
@@ -49,18 +52,18 @@
 
 #include "lirc_driver.h"
 
-#define CMD_NONE	       0x00
-#define CMD_IRDATA	       0x01
-#define CMD_COMDATA	       0x02
-#define CMD_SETCOMBAUD	       0x03
-#define CMD_GETCOMBAUD	       0x04
-#define CMD_GETIOS	       0x05
-#define CMD_GETIO	       0x06
-#define CMD_SETIOS	       0x07
-#define CMD_SETIO	       0x08
-#define IRRX_NODATA	       0x0000
-#define IRRX_F_POLL	       6000000 // 6MHz
-#define IRRX_CMD	       0x7500
+#define CMD_NONE            0x00
+#define CMD_IRDATA          0x01
+#define CMD_COMDATA         0x02
+#define CMD_SETCOMBAU       0x03
+#define CMD_GETCOMBAUD      0x04
+#define CMD_GETIOS          0x05
+#define CMD_GETIO           0x06
+#define CMD_SETIOS          0x07
+#define CMD_SETIO           0x08
+#define IRRX_NODATA         0x0000
+#define IRRX_F_POLL         6000000 // 6MHz
+#define IRRX_CMD            0x7500
 
 //*** raw hid interface ******************************************************
 
@@ -147,7 +150,6 @@ raw_hid *rawhidopen(int vid, int pid, int info)
 	usb_dev_handle *usb;
 	uint8_t buf[1024];
 	int ifacenum, n, ep_in, ep_out;
-//	int len;
 	raw_hid *hid;
 	char text[512];
 	//usb_set_debug(3);
@@ -155,14 +157,14 @@ raw_hid *rawhidopen(int vid, int pid, int info)
 	usb_init();
 	usb_find_busses();
 	usb_find_devices();	
-	for (bus = usb_get_busses(); bus; bus = bus->next) {
+	for (bus = usb_busses; bus; bus = bus->next) {
 		for (dev = bus->devices; dev; dev = dev->next) {
 			if (dev->descriptor.idVendor != vid) continue;
 			if (dev->descriptor.idProduct != pid) continue;
 			if (!dev->config) continue;
 			if (dev->config->bNumInterfaces < 1) continue;
 			if (info)
-				logprintf(LOG_NOTICE,"yaUsbIr: device: vid=%04X, pic=%04X, with %d interface",
+				logprintf(LOG_NOTICE,"yaUsbIr: device: vid=%04X, pid=%04X, with %d interface",
 					dev->descriptor.idVendor,dev->descriptor.idProduct,dev->config->bNumInterfaces);
 
 			iface = dev->config->interface;
@@ -363,6 +365,46 @@ static void child_process(int fd_rx2main, int fd_main2tx, int fd_tx2main)
                 }
 
 		usleep(500000);// Wait a while and try again
+	}
+}
+
+static int ya_usbir_drvctl(unsigned int cmd, void* arg)
+{
+	switch (cmd) {
+	case DRVCTL_GET_DEVICES:
+	{
+		// drv_enum_usb works onyl if support is compiled in main lirc package
+		//return drv_enum_usb((glob_t*) arg, is_device_ok);
+		glob_t *glob = (glob_t*) arg;
+		struct usb_bus* usb_bus;
+		struct usb_device* dev;
+		char device_path[2 * MAXPATHLEN + 32];
+
+		usb_init();
+		usb_find_busses();
+		usb_find_devices();
+		glob_t_init(glob);
+		for (usb_bus = usb_busses; usb_bus; usb_bus = usb_bus->next) {
+			for (dev = usb_bus->devices; dev; dev = dev->next) {
+				if ((dev->descriptor.idVendor != usb_vendor) ||
+				(dev->descriptor.idProduct != usb_product))
+					continue;
+				snprintf(device_path, sizeof(device_path),
+						 "/dev/bus/usb/%s/%s     %04x:%04x",
+						 dev->bus->dirname, dev->filename,
+						 dev->descriptor.idVendor,
+						 dev->descriptor.idProduct);
+				glob_t_add_path(glob, device_path);
+			}
+		}
+		drv_enum_add_udev_info(glob);
+		return 0;
+	}
+	case DRVCTL_FREE_DEVICES:
+		drv_enum_free((glob_t*) arg);
+		return 0;
+	default:
+		return DRV_ERR_NOT_IMPLEMENTED;
 	}
 }
 
@@ -624,7 +666,7 @@ int ya_usbir_send(struct ir_remote *remote, struct ir_ncode *code)
  ****************************************************************************/
 const struct driver hw_ya_usbir = {
         .name           =       "ya_usbir",
-        .device         =       "",
+        .device         =       NULL,
         .features       =       LIRC_CAN_REC_MODE2 | \
                                 LIRC_CAN_SEND_PULSE,
         .send_mode      =       LIRC_MODE_PULSE,
@@ -637,11 +679,12 @@ const struct driver hw_ya_usbir = {
         .send_func      =       ya_usbir_send,
         .rec_func       =       ya_usbir_rec,
         .decode_func    =       receive_decode,
-        //.drvctl_func    =       hwftdi_ioctl,
+        .drvctl_func    =       ya_usbir_drvctl,
         .readdata       =       ya_usbir_readdata,
-        .api_version    =       2,
-        .driver_version =       "0.9.4",
-        .info           =       "No info available"
+        .api_version    =       3,
+        .driver_version =       "0.10.1",
+        .info           =       "No info available",
+        .device_hint    =       "drvctl"
 };
 
 const struct driver* hardwares[] = { &hw_ya_usbir, (const struct driver*)NULL };

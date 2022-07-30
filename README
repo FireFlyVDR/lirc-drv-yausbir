@@ -1,10 +1,10 @@
-LIRC driver for the yaUsbIR V3 USB IR Receiver/Transmitter/Power-On Switch
+LIRC driver for the yaUsbIR V3 USB IR Transceiver with power switch
 
-This is a LIRC userrspace driver for the yaUsbIR V3 USB IR Transceiver based
+This is a LIRC user-space driver for the yaUsbIR V3 USB IR Transceiver based
 on the original patch lirc-0.9.0_ya_usbir_v3.5.diff.tar.gz for LIRC 0.9.0
 
 Copyright (C) 2012 Uwe Guenther
-Copyright (C) 2017 Christoph Haubrich
+Copyright (C) 2017,2022 Christoph Haubrich
 
   This program is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -28,9 +28,22 @@ Installation:
  - unpack all files in one folder, e.g. lirc-drv-yausbir
  - install the correspoding lirc-devel package
  - cd lirc-drv-yausbir
- - make
+ - make ya_usbir.so
  - make install
  - copy yaUsbIR_V3_lircd.conf to the LIRC configuration folder, e.g. /etc/lirc/lircd.conf.d
  - set driver in /etc/lirc/lirc_options.conf in paragraph [lircd] to
       driver = ya_usbir
  - continue the setup of your remote control as described in the original PDF
+
+Checks:
+  1) to test the driver installation use 
+  #> lirc-lsplugins
+  # Driver            Flags Plugin
+  ....
+  ya_usbir            -asL  /usr/lib64/lirc/plugins/ya_usbir.so
+
+  2) to test if the hardware was found successfully use
+  #>  mode2 --list-devices
+  /dev/bus/usb/001/002 [10c4:876c] UG Development Lab yaUsbIR V3:IR transceiver with power switch version:  1.10 serial: XXXX 
+
+
